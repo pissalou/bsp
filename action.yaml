@@ -21,7 +21,7 @@ runs:
     - name: Checkout
       uses: actions/checkout@v3
       with:
-        repository: radxa-repo/bsp
+        repository: pissalou/bsp
         submodules: true
     - name: Install dependency
       shell: bash
