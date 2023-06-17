@@ -63,7 +63,7 @@ jobs:
         editions: [ rockchip ]
     steps:
       - name: Build
-        uses: radxa-repo/bsp@main
+        uses: pissalou/bsp@main
         with:
           target: ${{ matrix.targets }}
           edition: ${{ matrix.editions }}
