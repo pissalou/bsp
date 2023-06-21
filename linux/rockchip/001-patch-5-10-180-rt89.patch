@@ -26891,11 +26891,11 @@ index c18dc8e61d352..16ce2b05df904 100644
  static unsigned long cache_alloc_handle(struct zs_pool *pool, gfp_t gfp)
  {
 -	return (unsigned long)kmem_cache_alloc(pool->handle_cachep,
--			gfp & ~(__GFP_HIGHMEM|__GFP_MOVABLE));
+-			gfp & ~(__GFP_HIGHMEM|__GFP_MOVABLE|__GFP_CMA));
 +	void *p;
 +
 +	p = kmem_cache_alloc(pool->handle_cachep,
-+			     gfp & ~(__GFP_HIGHMEM|__GFP_MOVABLE));
++			     gfp & ~(__GFP_HIGHMEM|__GFP_MOVABLE|__GFP_CMA));
 +#ifdef CONFIG_PREEMPT_RT
 +	if (p) {
 +		struct zsmalloc_handle *zh = p;
