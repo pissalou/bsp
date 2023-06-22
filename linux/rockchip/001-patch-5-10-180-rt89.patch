@@ -6770,7 +6770,7 @@ index 0771cd2265813..3fa4c14c8e2b7 100644
  	return true;
  }
  
-@@ -167,10 +210,10 @@ static inline bool serial8250_clear_THRI(struct uart_8250_port *up)
+@@ -173,10 +216,10 @@ static inline bool serial8250_clear_THRI(struct uart_8250_port *up)
  	if (!(up->ier & UART_IER_THRI))
  		return false;
  	up->ier &= ~UART_IER_THRI;
