@@ -6710,7 +6710,7 @@ diff --git a/drivers/tty/serial/8250/8250.h b/drivers/tty/serial/8250/8250.h
 index 0771cd2265813..3fa4c14c8e2b7 100644
 --- a/drivers/tty/serial/8250/8250.h
 +++ b/drivers/tty/serial/8250/8250.h
-@@ -134,15 +134,58 @@ static inline void serial_dl_write(struct uart_8250_port *up, int value)
+@@ -156,15 +156,58 @@ static inline void serial_dl_write(struct uart_8250_port *up, int value)
  	up->dl_write(up, value);
  }
  
