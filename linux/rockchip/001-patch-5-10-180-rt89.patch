@@ -830,7 +830,7 @@ index fcccf35f5cf96..3b981ad0c3222 100644
  #define _TIF_UPROBE		(1 << TIF_UPROBE)
  #define _TIF_SYSCALL_TRACE	(1 << TIF_SYSCALL_TRACE)
  #define _TIF_SYSCALL_AUDIT	(1 << TIF_SYSCALL_AUDIT)
-@@ -162,8 +159,9 @@ extern int vfp_restore_user_hwstate(struct user_vfp *,
+@@ -162,8 +159,8 @@ extern int vfp_restore_user_hwstate(struct user_vfp *,
   * Change these and you break ASM code in entry-common.S
   */
  #define _TIF_WORK_MASK		(_TIF_NEED_RESCHED | _TIF_SIGPENDING | \
