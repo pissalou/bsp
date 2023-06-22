@@ -6762,9 +6762,9 @@ index 0771cd2265813..3fa4c14c8e2b7 100644
  	if (up->ier & UART_IER_THRI)
  		return false;
  	up->ier |= UART_IER_THRI;
-#if defined(CONFIG_ARCH_ROCKCHIP) && defined(CONFIG_NO_GKI)
+ #if defined(CONFIG_ARCH_ROCKCHIP) && defined(CONFIG_NO_GKI)
 	up->ier |= UART_IER_PTIME;
-#endif
+ #endif
 -	serial_out(up, UART_IER, up->ier);
 +	serial8250_set_IER(up, up->ier);
  	return true;
@@ -6774,9 +6774,9 @@ index 0771cd2265813..3fa4c14c8e2b7 100644
  	if (!(up->ier & UART_IER_THRI))
  		return false;
  	up->ier &= ~UART_IER_THRI;
-#if defined(CONFIG_ARCH_ROCKCHIP) && defined(CONFIG_NO_GKI)
+ #if defined(CONFIG_ARCH_ROCKCHIP) && defined(CONFIG_NO_GKI)
 	up->ier &= ~UART_IER_PTIME;
-#endif
+ #endif
 -	serial_out(up, UART_IER, up->ier);
 +	serial8250_set_IER(up, up->ier);
  	return true;
