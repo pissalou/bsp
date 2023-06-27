@@ -19249,7 +19249,7 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
  		get_task_struct(task);
  }
  
-@@ -571,28 +587,39 @@ void wake_q_add(struct wake_q_head *head, struct task_struct *task)
+@@ -571,30 +587,40 @@ void wake_q_add(struct wake_q_head *head, struct task_struct *task)
   */
  void wake_q_add_safe(struct wake_q_head *head, struct task_struct *task)
  {
@@ -19276,11 +19276,12 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
  		/* Task can safely be re-inserted now: */
  		node = node->next;
 -		task->wake_q.next = NULL;
- 
+ 		task->wake_q_count = head->count;
 +		if (sleeper)
 +			task->wake_q_sleeper.next = NULL;
 +		else
 +			task->wake_q.next = NULL;
+ 
  		/*
  		 * wake_up_process() executes a full barrier, which pairs with
  		 * the queueing in wake_q_add() so as not to miss wakeups.
@@ -19290,13 +19291,13 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 +			wake_up_lock_sleeper(task);
 +		else
 +			wake_up_process(task);
-+
+ 		task->wake_q_count = 0;
  		put_task_struct(task);
  	}
  }
 @@ -628,6 +655,48 @@ void resched_curr(struct rq *rq)
- 		trace_sched_wake_idle_without_ipi(cpu);
  }
+ EXPORT_SYMBOL_GPL(resched_curr);
  
 +#ifdef CONFIG_PREEMPT_LAZY
 +
@@ -19434,7 +19435,7 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 +	if (is_per_cpu_kthread(p) || is_migration_disabled(p))
  		return cpu_online(cpu);
  
- 	return cpu_active(cpu);
+ 	if (!cpu_active(cpu))
 @@ -1759,8 +1904,21 @@ static struct rq *move_queued_task(struct rq *rq, struct rq_flags *rf,
  }
  
@@ -19603,7 +19604,7 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
  	return 0;
  }
  
-@@ -1833,18 +2093,39 @@ static int migration_cpu_stop(void *data)
+@@ -1833,19 +2093,40 @@ static int migration_cpu_stop(void *data)
   * sched_class::set_cpus_allowed must do the below, but is not required to
   * actually call this function.
   */
@@ -19617,6 +19618,7 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 +
  	cpumask_copy(&p->cpus_mask, new_mask);
  	p->nr_cpus_allowed = cpumask_weight(new_mask);
+ 	trace_android_rvh_set_cpus_allowed_comm(p, new_mask);
  }
  
 -void do_set_cpus_allowed(struct task_struct *p, const struct cpumask *new_mask)
@@ -19876,8 +19878,8 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 +}
 +
  /*
-  * Change a given task's CPU affinity. Migrate the thread to a
-  * proper CPU and schedule it away if the CPU it's executing on
+  * Called with both p->pi_lock and rq->lock held; drops both before returning.
+  */
 @@ -1878,7 +2375,8 @@ void do_set_cpus_allowed(struct task_struct *p, const struct cpumask *new_mask)
   * call is not atomic; no spinlocks may be held.
   */
@@ -19886,10 +19888,10 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 +				  const struct cpumask *new_mask,
 +				  u32 flags)
  {
- 	const struct cpumask *cpu_valid_mask = cpu_active_mask;
- 	unsigned int dest_cpu;
+ 	struct rq_flags rf;
+ 	struct rq *rq;
 @@ -1889,9 +2387,14 @@ static int __set_cpus_allowed_ptr(struct task_struct *p,
- 	rq = task_rq_lock(p, &rf);
+ 
  	update_rq_clock(rq);
  
 -	if (p->flags & PF_KTHREAD) {
@@ -19904,7 +19906,7 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 +		 * set_cpus_allowed_common() and actually reset p->cpus_ptr.
  		 */
  		cpu_valid_mask = cpu_online_mask;
- 	}
+ 	} else if (!cpumask_subset(new_mask, cpu_allowed_mask)) {
 @@ -1900,13 +2403,22 @@ static int __set_cpus_allowed_ptr(struct task_struct *p,
  	 * Must re-check here, to close a race against __kthread_bind(),
  	 * sched_setaffinity() is not guaranteed to observe the flag.
@@ -19952,7 +19954,7 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 -	if (task_running(rq, p) || p->state == TASK_WAKING) {
 -		struct migration_arg arg = { p, dest_cpu };
 -		/* Need help from migration thread: drop lock and wait. */
--		task_rq_unlock(rq, p, &rf);
+-		task_rq_unlock(rq, p, rf);
 -		stop_one_cpu(cpu_of(rq), migration_cpu_stop, &arg);
 -		return 0;
 -	} else if (task_on_rq_queued(p)) {
@@ -19960,10 +19962,10 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 -		 * OK, since we're going to drop the lock immediately
 -		 * afterwards anyway.
 -		 */
--		rq = move_queued_task(rq, &rf, p, dest_cpu);
+-		rq = move_queued_task(rq, rf, p, dest_cpu);
 -	}
  out:
- 	task_rq_unlock(rq, p, &rf);
+ 	task_rq_unlock(rq, p, rf);
  
 @@ -1956,7 +2453,7 @@ static int __set_cpus_allowed_ptr(struct task_struct *p,
  
@@ -19985,7 +19987,7 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
  	trace_sched_migrate_task(p, new_cpu);
 @@ -2129,6 +2628,18 @@ int migrate_swap(struct task_struct *cur, struct task_struct *p,
  }
- #endif /* CONFIG_NUMA_BALANCING */
+ EXPORT_SYMBOL_GPL(migrate_swap);
  
 +static bool check_task_state(struct task_struct *p, long match_state)
 +{
@@ -20040,7 +20042,7 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 +			 *
 +			 * More yuck to audit.
 +			 */
- 			do_set_cpus_allowed(p, cpu_possible_mask);
+ 			do_set_cpus_allowed(p, task_cpu_possible_mask(p));
  			state = fail;
  			break;
 @@ -2361,7 +2879,7 @@ int select_task_rq(struct task_struct *p, int cpu, int sd_flags, int wake_flags)
@@ -20143,8 +20145,8 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 +	if (!(wake_flags & WF_LOCK_SLEEPER))
 +		p->saved_state = TASK_RUNNING;
  
- 	trace_sched_waking(p);
- 
+ #ifdef CONFIG_FREEZER
+ 	/*
 @@ -3061,6 +3620,18 @@ int wake_up_process(struct task_struct *p)
  }
  EXPORT_SYMBOL(wake_up_process);
@@ -20394,7 +20396,7 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
  
  	fire_sched_in_preempt_notifiers(current);
  	/*
-@@ -3644,23 +4322,18 @@ static struct rq *finish_task_switch(struct task_struct *prev)
+@@ -3644,24 +4322,18 @@ static struct rq *finish_task_switch(struct task_struct *prev)
  	 *   provided by mmdrop(),
  	 * - a sync_core for SYNC_CORE.
  	 */
@@ -20416,6 +20418,7 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 -		 * task and put them back on the free list.
 -		 */
 -		kprobe_flush_task(prev);
+-		trace_android_rvh_flush_task(prev);
 -
 -		/* Task is done with its stack. */
 -		put_task_stack(prev);
@@ -20500,7 +20503,7 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 +	clear_tsk_need_resched_lazy(prev);
  	clear_preempt_need_resched();
  
- 	if (likely(prev != next)) {
+ 	trace_android_rvh_schedule(prev, next, rq);
 @@ -4532,6 +5168,7 @@ static void __sched notrace __schedule(bool preempt)
  		 */
  		++*switch_count;
@@ -20686,9 +20689,9 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 +	head = splice_balance_callbacks(rq);
  	task_rq_unlock(rq, p, &rf);
  
- 	if (pi) {
+ 	if (pi)
 @@ -5459,7 +6139,7 @@ static int __sched_setscheduler(struct task_struct *p,
- 	}
+ 		rt_mutex_adjust_pi(p);
  
  	/* Run balance callbacks after we've adjusted the PI chain: */
 -	balance_callback(rq);
@@ -20733,7 +20736,7 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
  /*
   * Ensure that the idle task is using init_mm right before its CPU goes
   * offline.
-@@ -6681,119 +7364,126 @@ void idle_task_exit(void)
+@@ -6681,156 +7364,126 @@ void idle_task_exit(void)
  	/* finish_cpu(), as ran on the BP, will clean up the active_mm state */
  }
  
@@ -20797,13 +20800,16 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 - * Called with rq->lock held even though we'er in stop_machine() and
 - * there's no concurrency possible, we hold the required locks anyway
 - * because of lock validation efforts.
+- *
+- * force: if false, the function will skip CPU pinned kthreads.
 + * Ensure we only run per-cpu kthreads once the CPU goes !active.
   */
--static void migrate_tasks(struct rq *dead_rq, struct rq_flags *rf)
+-static void migrate_tasks(struct rq *dead_rq, struct rq_flags *rf, bool force)
 +static void balance_push(struct rq *rq)
  {
 -	struct rq *rq = dead_rq;
--	struct task_struct *next, *stop = rq->stop;
+-	struct task_struct *next, *tmp, *stop = rq->stop;
+-	LIST_HEAD(percpu_kthreads);
 -	struct rq_flags orf = *rf;
 -	int dest_cpu;
 +	struct task_struct *push_task = rq->curr;
@@ -20864,6 +20870,11 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 +	raw_spin_lock(&rq->lock);
 +}
  
+-#ifdef CONFIG_SCHED_DEBUG
+-	/* note the clock update in orf */
+-	orf.clock_update_flags |= RQCF_UPDATED;
+-#endif
+-
 -	for (;;) {
 -		/*
 -		 * There's this thread running, bail when that's the only
@@ -20885,6 +20896,20 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 +	rq_unlock_irqrestore(rq, &rf);
 +}
  
+-		/*
+-		 * Argh ... no iterator for tasks, we need to remove the
+-		 * kthread from the run-queue to continue.
+-		 */
+-		if (!force && is_per_cpu_kthread(next)) {
+-			INIT_LIST_HEAD(&next->percpu_kthread_node);
+-			list_add(&next->percpu_kthread_node, &percpu_kthreads);
+-
+-			/* DEQUEUE_SAVE not used due to move_entity in rt */
+-			deactivate_task(rq, next,
+-					DEQUEUE_NOCLOCK);
+-			continue;
+-		}
+-
 -		/*
 -		 * Rules for changing task_struct::cpus_mask are holding
 -		 * both pi_lock and rq->lock, such that holding either
@@ -20912,7 +20937,14 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 -		 * changed the task, WARN if weird stuff happened, because in
 -		 * that case the above rq->lock drop is a fail too.
 -		 */
--		if (WARN_ON(task_rq(next) != rq || !task_on_rq_queued(next))) {
+-		if (task_rq(next) != rq || !task_on_rq_queued(next)) {
+-			/*
+-			 * In the !force case, there is a hole between
+-			 * rq_unlock() and rq_relock(), where another CPU might
+-			 * not observe an up to date cpu_active_mask and try to
+-			 * move tasks around.
+-			 */
+-			WARN_ON(force);
 -			raw_spin_unlock(&next->pi_lock);
 -			continue;
 -		}
@@ -20938,6 +20970,14 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 +{
 +}
  
+-	list_for_each_entry_safe(next, tmp, &percpu_kthreads,
+-				 percpu_kthread_node) {
+-
+-		/* ENQUEUE_RESTORE not used due to move_entity in rt */
+-		activate_task(rq, next, ENQUEUE_NOCLOCK);
+-		list_del(&next->percpu_kthread_node);
+-	}
+-
 -	rq->stop = stop;
 +static inline void balance_push_set(int cpu, bool on)
 +{
@@ -20947,9 +20987,9 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 +{
  }
 +
- #endif /* CONFIG_HOTPLUG_CPU */
  
- void set_rq_online(struct rq *rq)
+ static int drain_rq_cpu_stop(void *data)
+ {
 @@ -6879,6 +7569,8 @@ int sched_cpu_activate(unsigned int cpu)
  	struct rq *rq = cpu_rq(cpu);
  	struct rq_flags rf;
@@ -21145,9 +21185,9 @@ index 0033731a07976..11c4df2010de5 100644
  	if (lowest_mask) {
 -		cpumask_and(lowest_mask, p->cpus_ptr, vec->mask);
 +		cpumask_and(lowest_mask, &p->cpus_mask, vec->mask);
+ 		cpumask_and(lowest_mask, lowest_mask, cpu_active_mask);
  
- 		/*
- 		 * We have to ensure that we have at least one bit
+ #ifdef CONFIG_RT_SOFTINT_OPTIMIZATION
 diff --git a/kernel/sched/cputime.c b/kernel/sched/cputime.c
 index 5a55d23004524..2c36a5fad5891 100644
 --- a/kernel/sched/cputime.c
@@ -21176,7 +21216,7 @@ index 5a55d23004524..2c36a5fad5891 100644
  
  	/*
  	 * We do not account for softirq time from ksoftirqd here.
-@@ -66,12 +68,11 @@ void irqtime_account_irq(struct task_struct *curr)
+@@ -66,14 +68,13 @@ void irqtime_account_irq(struct task_struct *curr)
  	 * in that case, so as not to confuse scheduler with a special task
  	 * that do not consume any time, but still wants to run.
  	 */
@@ -21186,6 +21226,8 @@ index 5a55d23004524..2c36a5fad5891 100644
 -	else if (in_serving_softirq() && curr != this_cpu_ksoftirqd())
 +	else if ((pc & SOFTIRQ_OFFSET) && curr != this_cpu_ksoftirqd())
  		irqtime_account_delta(irqtime, delta, CPUTIME_SOFTIRQ);
+ 
+ 	trace_android_rvh_account_irq(curr, cpu, delta);
  }
 -EXPORT_SYMBOL_GPL(irqtime_account_irq);
  
@@ -21371,9 +21413,13 @@ diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
 index c004e3b89c324..bc1e5d3231088 100644
 --- a/kernel/sched/fair.c
 +++ b/kernel/sched/fair.c
-@@ -4397,7 +4397,7 @@ check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
+@@ -4397,11 +4397,11 @@ check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
  	ideal_runtime = sched_slice(cfs_rq, curr);
  	delta_exec = curr->sum_exec_runtime - curr->prev_sum_exec_runtime;
+ 	trace_android_rvh_check_preempt_tick(current, &ideal_runtime, &skip_preempt,
+ 			delta_exec, cfs_rq, curr, sysctl_sched_min_granularity);
+ 	if (skip_preempt)
+ 		return;
  	if (delta_exec > ideal_runtime) {
 -		resched_curr(rq_of(cfs_rq));
 +		resched_curr_lazy(rq_of(cfs_rq));
@@ -21388,7 +21434,7 @@ index c004e3b89c324..bc1e5d3231088 100644
 +		resched_curr_lazy(rq_of(cfs_rq));
  }
  
- static void
+ void set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 @@ -4564,7 +4564,7 @@ entity_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr, int queued)
  	 * validating it and just reschedule.
  	 */
@@ -21683,7 +21729,7 @@ index 08db8e095e48f..c2c9c386456db 100644
  #endif /* CONFIG_SMP */
  
  #ifdef CONFIG_IRQ_TIME_ACCOUNTING
-@@ -1052,6 +1057,12 @@ struct rq {
+@@ -1052,4 +1057,10 @@ struct rq {
  	/* Must be inspected within a rcu lock section */
  	struct cpuidle_state	*idle_state;
  #endif
@@ -21693,9 +21739,7 @@ index 08db8e095e48f..c2c9c386456db 100644
 +#endif
 +	unsigned int		push_busy;
 +	struct cpu_stop_work	push_work;
- };
  
- #ifdef CONFIG_FAIR_GROUP_SCHED
 @@ -1079,6 +1090,16 @@ static inline int cpu_of(struct rq *rq)
  #endif
  }
@@ -21730,9 +21774,9 @@ index 08db8e095e48f..c2c9c386456db 100644
 +#define BALANCE_WORK	0x01
 +#define BALANCE_PUSH	0x02
 +
+ extern int migrate_swap(struct task_struct *p, struct task_struct *t,
+ 			int cpu, int scpu);
  static inline void
- queue_balance_callback(struct rq *rq,
- 		       struct callback_head *head,
 @@ -1393,12 +1420,13 @@ queue_balance_callback(struct rq *rq,
  {
  	lockdep_assert_held(&rq->lock);
@@ -21748,14 +21792,10 @@ index 08db8e095e48f..c2c9c386456db 100644
  }
  
  #define rcu_dereference_check_sched_domain(p) \
-@@ -1725,6 +1753,7 @@ static inline int task_on_rq_migrating(struct task_struct *p)
- #define WF_FORK			0x02		/* Child wakeup after fork */
- #define WF_MIGRATED		0x04		/* Internal use, task got migrated */
+@@ -1725,2 +1753,3 @@ static inline int task_on_rq_migrating(struct task_struct *p)
  #define WF_ON_CPU		0x08		/* Wakee is on_cpu */
 +#define WF_LOCK_SLEEPER		0x10		/* Wakeup spinlock "sleeper" */
- 
- /*
-  * To aid in avoiding the subversion of "niceness" due to uneven distribution
+ #define WF_ANDROID_VENDOR	0x1000		/* Vendor specific for Android */
 @@ -1806,10 +1835,13 @@ struct sched_class {
  	void (*task_woken)(struct rq *this_rq, struct task_struct *task);
  
@@ -21809,8 +21849,8 @@ index 08db8e095e48f..c2c9c386456db 100644
 +
 +extern int push_cpu_stop(void *arg);
  
+ extern unsigned long __read_mostly max_load_balance_interval;
  #endif
- 
 @@ -1943,6 +2000,15 @@ extern void reweight_task(struct task_struct *p, int prio);
  extern void resched_curr(struct rq *rq);
  extern void resched_cpu(int cpu);
@@ -22090,8 +22130,8 @@ index 09229ad822096..c9adc5c462485 100644
  
  #define CREATE_TRACE_POINTS
  #include <trace/events/irq.h>
-@@ -92,27 +94,212 @@ static bool ksoftirqd_running(unsigned long pending)
- 		!__kthread_should_park(tsk);
+@@ -92,27 +94,212 @@ static void wakeup_softirqd(void)
+ 		wake_up_process(tsk);
  }
  
 +#ifdef CONFIG_TRACE_IRQFLAGS
@@ -22397,8 +22437,8 @@ index 09229ad822096..c9adc5c462485 100644
  	current->flags &= ~PF_MEMALLOC;
  
  	pending = local_softirq_pending();
+ 	deferred = softirq_deferred_for_rt(pending);
 -	account_irq_enter_time(current);
- 
 -	__local_bh_disable_ip(_RET_IP_, SOFTIRQ_OFFSET);
 +	softirq_handle_begin();
  	in_hardirq = lockdep_softirq_start();
@@ -22410,6 +22450,7 @@ index 09229ad822096..c9adc5c462485 100644
  		pending >>= softirq_bit;
  	}
  
+ 	__this_cpu_write(active_softirqs, 0);
 -	if (__this_cpu_read(ksoftirqd) == current)
 +	if (!IS_ENABLED(CONFIG_PREEMPT_RT) &&
 +	    __this_cpu_read(ksoftirqd) == current)
@@ -22417,11 +22458,10 @@ index 09229ad822096..c9adc5c462485 100644
 +
  	local_irq_disable();
  
- 	pending = local_softirq_pending();
 @@ -320,46 +581,23 @@ asmlinkage __visible void __softirq_entry __do_softirq(void)
+ 	if (pending | deferred)
  		wakeup_softirqd();
- 	}
- 
+ #endif
 +	account_softirq_exit(current);
  	lockdep_softirq_end(in_hardirq);
 -	account_irq_exit_time(current);
@@ -22443,7 +22483,7 @@ index 09229ad822096..c9adc5c462485 100644
 -
 -	pending = local_softirq_pending();
 -
--	if (pending && !ksoftirqd_running(pending))
+-	if (pending)
 -		do_softirq_own_stack();
 -
 -	local_irq_restore(flags);
@@ -22472,15 +22512,12 @@ index 09229ad822096..c9adc5c462485 100644
  }
  
  /**
-@@ -371,32 +609,6 @@ void irq_enter(void)
+@@ -371,29 +609,6 @@ void irq_enter(void)
  	irq_enter_rcu();
  }
  
 -static inline void invoke_softirq(void)
 -{
--	if (ksoftirqd_running(local_softirq_pending()))
--		return;
--
 -	if (!force_irqthreads) {
 -#ifdef CONFIG_HAVE_IRQ_EXIT_ON_IRQ_STACK
 -		/*
@@ -22548,8 +22585,8 @@ index 09229ad822096..c9adc5c462485 100644
 -							&t->state))
 +				if (!tasklet_clear_sched(t))
  					BUG();
- 				if (t->use_callback)
- 					t->callback(t);
+ 				if (t->use_callback) {
+ 					trace_tasklet_entry(t->callback);
 @@ -607,21 +828,62 @@ void tasklet_init(struct tasklet_struct *t,
  }
  EXPORT_SYMBOL(tasklet_init);
@@ -22692,7 +22729,7 @@ index 890b79cf0e7c3..971d8acceaecb 100644
  	};
  
  	cpu_stop_init_done(&done, 2);
-@@ -367,7 +384,7 @@ int stop_two_cpus(unsigned int cpu1, unsigned int cpu2, cpu_stop_fn_t fn, void *
+@@ -358,6 +375,6 @@ int stop_two_cpus(unsigned int cpu1, unsigned int cpu2, cpu_stop_fn_t fn, void *
  bool stop_one_cpu_nowait(unsigned int cpu, cpu_stop_fn_t fn, void *arg,
  			struct cpu_stop_work *work_buf)
  {
@@ -22700,7 +22737,6 @@ index 890b79cf0e7c3..971d8acceaecb 100644
 +	*work_buf = (struct cpu_stop_work){ .fn = fn, .arg = arg, .caller = _RET_IP_, };
  	return cpu_stop_queue_work(cpu, work_buf);
  }
- 
 @@ -487,6 +504,8 @@ static void cpu_stopper_thread(unsigned int cpu)
  		int ret;
  
@@ -24742,8 +24778,8 @@ index 4ab398a2de938..9c681f29e61e6 100644
  			(void *)bugaddr);
 +	pr_flush(1000, true);
  
- 	return BUG_TRAP_TYPE_BUG;
- }
+ 	trace_android_rvh_report_bug(file, line, bugaddr);
+ 
 diff --git a/lib/cpumask.c b/lib/cpumask.c
 index fb22fb266f937..c3c76b8333846 100644
 --- a/lib/cpumask.c
@@ -25110,7 +25146,7 @@ index 390165ffbb0fc..c8cbcb5118b02 100644
 +config KMAP_LOCAL
 +	bool
 +
- endmenu
+ source "mm/damon/Kconfig"
 diff --git a/mm/highmem.c b/mm/highmem.c
 index 1352a27951e3b..72b9a2d95c72a 100644
 --- a/mm/highmem.c
@@ -25681,8 +25717,8 @@ index e8e0f1cec8b04..25023e20fe17d 100644
  #include <linux/sched/mm.h>
 +#include <linux/local_lock.h>
  #include <linux/page_owner.h>
+ #include <linux/page_pinner.h>
  #include <linux/kthread.h>
- #include <linux/memcontrol.h>
 @@ -386,6 +387,13 @@ EXPORT_SYMBOL(nr_node_ids);
  EXPORT_SYMBOL(nr_online_nodes);
  #endif
@@ -25979,15 +26015,14 @@ index e8e0f1cec8b04..25023e20fe17d 100644
  }
  
  /*
-@@ -3407,7 +3476,7 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
+@@ -3407,6 +3476,6 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
  	struct page *page;
  	unsigned long flags;
  
 -	local_irq_save(flags);
 +	local_lock_irqsave(&pa_lock.l, flags);
  	pcp = &this_cpu_ptr(zone->pageset)->pcp;
- 	list = &pcp->lists[migratetype];
- 	page = __rmqueue_pcplist(zone,  migratetype, alloc_flags, pcp, list);
+ 	page = __rmqueue_pcplist(zone,  migratetype, alloc_flags, pcp,
 @@ -3415,7 +3484,7 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
  		__count_zid_vm_events(PGALLOC, page_zonenum(page), 1);
  		zone_statistics(preferred_zone, zone);
@@ -26007,10 +26042,12 @@ index e8e0f1cec8b04..25023e20fe17d 100644
  
  	do {
  		page = NULL;
-@@ -3475,7 +3545,7 @@ struct page *rmqueue(struct zone *preferred_zone,
+@@ -3475,9 +3545,9 @@ struct page *rmqueue(struct zone *preferred_zone,
  
  	__count_zid_vm_events(PGALLOC, page_zonenum(page), 1 << order);
  	zone_statistics(preferred_zone, zone);
+ 	trace_android_vh_rmqueue(preferred_zone, zone, order,
+ 			gfp_flags, alloc_flags, migratetype);
 -	local_irq_restore(flags);
 +	local_unlock_irqrestore(&pa_lock.l, flags);
  
@@ -26519,23 +26556,21 @@ diff --git a/mm/slub.c b/mm/slub.c
 index 1384dc9068337..d90d8f9fc0d85 100644
 --- a/mm/slub.c
 +++ b/mm/slub.c
-@@ -435,7 +435,7 @@ static inline bool cmpxchg_double_slab(struct kmem_cache *s, struct page *page,
+@@ -431,5 +431,5 @@ static inline bool cmpxchg_double_slab(struct kmem_cache *s, struct page *page,
  
  #ifdef CONFIG_SLUB_DEBUG
  static unsigned long object_map[BITS_TO_LONGS(MAX_OBJS_PER_PAGE)];
 -static DEFINE_SPINLOCK(object_map_lock);
 +static DEFINE_RAW_SPINLOCK(object_map_lock);
  
- /*
-  * Determine a map of object in use on a page.
-@@ -451,7 +451,7 @@ static unsigned long *get_map(struct kmem_cache *s, struct page *page)
- 
+@@ -456,7 +456,7 @@ static unsigned long *get_map(struct kmem_cache *s, struct page *page)
+ {
  	VM_BUG_ON(!irqs_disabled());
  
 -	spin_lock(&object_map_lock);
 +	raw_spin_lock(&object_map_lock);
  
- 	bitmap_zero(object_map, page->objects);
+ 	__fill_map(object_map, s, page);
  
 @@ -464,7 +464,7 @@ static unsigned long *get_map(struct kmem_cache *s, struct page *page)
  static void put_map(unsigned long *map) __releases(&object_map_lock)
@@ -26744,7 +26779,7 @@ index 1384dc9068337..d90d8f9fc0d85 100644
  }
  
  /*
-@@ -2521,10 +2570,10 @@ static unsigned long count_partial(struct kmem_cache_node *n,
+@@ -2574,10 +2619,10 @@ static unsigned long count_partial(struct kmem_cache_node *n,
  	unsigned long x = 0;
  	struct page *page;
  
@@ -26756,7 +26791,7 @@ index 1384dc9068337..d90d8f9fc0d85 100644
 +	raw_spin_unlock_irqrestore(&n->list_lock, flags);
  	return x;
  }
- #endif /* CONFIG_SLUB_DEBUG || CONFIG_SYSFS */
+ #endif /* CONFIG_SLUB_DEBUG || CONFIG_SLUB_SYSFS */
 @@ -2663,8 +2712,10 @@ static inline void *get_freelist(struct kmem_cache *s, struct page *page)
   * already disabled (which is the case for bulk allocation).
   */
@@ -26820,9 +26855,10 @@ index 1384dc9068337..d90d8f9fc0d85 100644
  	return p;
  }
  
-@@ -2818,6 +2878,10 @@ static __always_inline void *slab_alloc_node(struct kmem_cache *s,
+@@ -2873,6 +2933,10 @@ static __always_inline void *slab_alloc_node(struct kmem_cache *s,
  	unsigned long tid;
  	struct obj_cgroup *objcg = NULL;
+ 	bool init = false;
  
 +	if (IS_ENABLED(CONFIG_PREEMPT_RT) && IS_ENABLED(CONFIG_DEBUG_ATOMIC_SLEEP))
 +		WARN_ON_ONCE(!preemptible() &&
@@ -26830,7 +26866,6 @@ index 1384dc9068337..d90d8f9fc0d85 100644
 +
  	s = slab_pre_alloc_hook(s, &objcg, 1, gfpflags);
  	if (!s)
- 		return NULL;
 @@ -2983,7 +3047,7 @@ static void __slab_free(struct kmem_cache *s, struct page *page,
  
  	do {
@@ -26891,20 +26926,18 @@ index 1384dc9068337..d90d8f9fc0d85 100644
  			if (unlikely(!p[i]))
  				goto error;
  
-@@ -3330,6 +3399,7 @@ int kmem_cache_alloc_bulk(struct kmem_cache *s, gfp_t flags, size_t size,
+@@ -3330,4 +3399,5 @@ int kmem_cache_alloc_bulk(struct kmem_cache *s, gfp_t flags, size_t size,
  	}
  	c->tid = next_tid(c->tid);
  	local_irq_enable();
 +	free_delayed(&to_free);
  
- 	/* Clear memory outside IRQ disabled fastpath loop */
- 	if (unlikely(slab_want_init_on_alloc(flags, s))) {
 @@ -3344,6 +3414,7 @@ int kmem_cache_alloc_bulk(struct kmem_cache *s, gfp_t flags, size_t size,
  	return i;
  error:
  	local_irq_enable();
 +	free_delayed(&to_free);
- 	slab_post_alloc_hook(s, objcg, flags, i, p);
+ 	slab_post_alloc_hook(s, objcg, flags, i, p, false);
  	__kmem_cache_free_bulk(s, i, p);
  	return 0;
 @@ -3479,7 +3550,7 @@ static void
@@ -26993,21 +27026,6 @@ index 1384dc9068337..d90d8f9fc0d85 100644
  	order = get_order(sizeof(struct location) * max);
  
  	l = (void *)__get_free_pages(flags, order);
-@@ -4749,12 +4829,12 @@ static int list_locations(struct kmem_cache *s, char *buf,
- 		if (!atomic_long_read(&n->nr_slabs))
- 			continue;
- 
--		spin_lock_irqsave(&n->list_lock, flags);
-+		raw_spin_lock_irqsave(&n->list_lock, flags);
- 		list_for_each_entry(page, &n->partial, slab_list)
- 			process_slab(&t, s, page, alloc);
- 		list_for_each_entry(page, &n->full, slab_list)
- 			process_slab(&t, s, page, alloc);
--		spin_unlock_irqrestore(&n->list_lock, flags);
-+		raw_spin_unlock_irqrestore(&n->list_lock, flags);
- 	}
- 
- 	for (i = 0; i < t.count; i++) {
 diff --git a/mm/vmalloc.c b/mm/vmalloc.c
 index fff03a331314f..2cbbbdb69ec42 100644
 --- a/mm/vmalloc.c
@@ -27303,11 +27321,11 @@ index 73cd50735df29..142170f876fdb 100644
  static unsigned long cache_alloc_handle(struct zs_pool *pool, gfp_t gfp)
  {
 -	return (unsigned long)kmem_cache_alloc(pool->handle_cachep,
--			gfp & ~(__GFP_HIGHMEM|__GFP_MOVABLE));
+-			gfp & ~(__GFP_HIGHMEM|__GFP_MOVABLE|__GFP_CMA));
 +	void *p;
 +
 +	p = kmem_cache_alloc(pool->handle_cachep,
-+			     gfp & ~(__GFP_HIGHMEM|__GFP_MOVABLE));
++			     gfp & ~(__GFP_HIGHMEM|__GFP_MOVABLE|__GFP_CMA));
 +#ifdef CONFIG_PREEMPT_RT
 +	if (p) {
 +		struct zsmalloc_handle *zh = p;
@@ -27829,85 +27847,6 @@ index 6d9af4ef93d7a..7a1759097b9ae 100644
  	return true;
  }
  EXPORT_SYMBOL(lock_sock_fast);
-diff --git a/net/ipv4/inet_hashtables.c b/net/ipv4/inet_hashtables.c
-index e093847c334da..b8369afec8491 100644
---- a/net/ipv4/inet_hashtables.c
-+++ b/net/ipv4/inet_hashtables.c
-@@ -637,7 +637,9 @@ int __inet_hash(struct sock *sk, struct sock *osk)
- 	int err = 0;
- 
- 	if (sk->sk_state != TCP_LISTEN) {
-+		local_bh_disable();
- 		inet_ehash_nolisten(sk, osk, NULL);
-+		local_bh_enable();
- 		return 0;
- 	}
- 	WARN_ON(!sk_unhashed(sk));
-@@ -669,11 +671,8 @@ int inet_hash(struct sock *sk)
- {
- 	int err = 0;
- 
--	if (sk->sk_state != TCP_CLOSE) {
--		local_bh_disable();
-+	if (sk->sk_state != TCP_CLOSE)
- 		err = __inet_hash(sk, NULL);
--		local_bh_enable();
--	}
- 
- 	return err;
- }
-@@ -684,17 +683,20 @@ void inet_unhash(struct sock *sk)
- 	struct inet_hashinfo *hashinfo = sk->sk_prot->h.hashinfo;
- 	struct inet_listen_hashbucket *ilb = NULL;
- 	spinlock_t *lock;
-+	bool state_listen;
- 
- 	if (sk_unhashed(sk))
- 		return;
- 
- 	if (sk->sk_state == TCP_LISTEN) {
-+		state_listen = true;
- 		ilb = &hashinfo->listening_hash[inet_sk_listen_hashfn(sk)];
--		lock = &ilb->lock;
-+		spin_lock(&ilb->lock);
- 	} else {
-+		state_listen = false;
- 		lock = inet_ehash_lockp(hashinfo, sk->sk_hash);
-+		spin_lock_bh(lock);
- 	}
--	spin_lock_bh(lock);
- 	if (sk_unhashed(sk))
- 		goto unlock;
- 
-@@ -707,7 +709,10 @@ void inet_unhash(struct sock *sk)
- 	__sk_nulls_del_node_init_rcu(sk);
- 	sock_prot_inuse_add(sock_net(sk), sk->sk_prot, -1);
- unlock:
--	spin_unlock_bh(lock);
-+	if (state_listen)
-+		spin_unlock(&ilb->lock);
-+	else
-+		spin_unlock_bh(lock);
- }
- EXPORT_SYMBOL_GPL(inet_unhash);
- 
-diff --git a/net/ipv6/inet6_hashtables.c b/net/ipv6/inet6_hashtables.c
-index 67c9114835c84..0a2e7f2283911 100644
---- a/net/ipv6/inet6_hashtables.c
-+++ b/net/ipv6/inet6_hashtables.c
-@@ -333,11 +333,8 @@ int inet6_hash(struct sock *sk)
- {
- 	int err = 0;
- 
--	if (sk->sk_state != TCP_CLOSE) {
--		local_bh_disable();
-+	if (sk->sk_state != TCP_CLOSE)
- 		err = __inet_hash(sk, NULL);
--		local_bh_enable();
--	}
- 
- 	return err;
- }
 diff --git a/net/sched/sch_api.c b/net/sched/sch_api.c
 index 7b24582a8a164..99390f2622b84 100644
 --- a/net/sched/sch_api.c
