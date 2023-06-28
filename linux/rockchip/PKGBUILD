@@ -1,4 +1,4 @@
-source=("001-patch-5-10-180-rt89.patch")  
+#source=("001-patch-5-10-180-rt89.patch")  
 
 #prepare() {
 #  patch -N -p1 -i "../001-patch-5-10-180-rt89.patch"  
