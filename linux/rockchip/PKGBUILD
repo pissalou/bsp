@@ -1,5 +1,5 @@
-#source=("001-patch-5-10-180-rt89.patch")  
-source=()
+source=("001-patch-5.10-gen-rkr4.1.patch")  
+#source=()
 
 #prepare() {
 #  patch -N -p1 -i "../001-patch-5-10-180-rt89.patch"  
