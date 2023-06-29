@@ -242,7 +242,7 @@ prepare_source() {
 
             if (( ${#patches[@]} ))
             then
-                git am --reject --whitespace=fix "${patches[@]}"
+                git apply --reject --whitespace=fix "${patches[@]}"
                 echo "Patchset $(basename $d) has been applied."
                 if $PATCH_PAUSE
                 then
