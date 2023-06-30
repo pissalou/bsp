@@ -811,13 +811,12 @@ index 536b6b979f634..875aaf9af9465 100644
  	mm_segment_t		addr_limit;	/* address limit */
  	struct task_struct	*task;		/* main task structure */
  	__u32			cpu;		/* cpu */
-@@ -134,8 +135,8 @@ extern int vfp_restore_user_hwstate(struct user_vfp *,
+@@ -134,7 +135,8 @@ extern int vfp_restore_user_hwstate(struct user_vfp *,
  #define TIF_SYSCALL_TRACE	4	/* syscall trace active */
  #define TIF_SYSCALL_AUDIT	5	/* syscall auditing active */
  #define TIF_SYSCALL_TRACEPOINT	6	/* syscall tracepoint instrumentation */
 -#define TIF_SECCOMP		7	/* seccomp syscall filtering active */
 +#define TIF_NEED_RESCHED_LAZY	7
--#define TIF_NOTIFY_SIGNAL	8	/* signal notifications exist */
 +#define TIF_SECCOMP		8	/* seccomp syscall filtering active */
  
  #define TIF_USING_IWMMXT	17
@@ -830,12 +829,12 @@ index 536b6b979f634..875aaf9af9465 100644
  #define _TIF_UPROBE		(1 << TIF_UPROBE)
  #define _TIF_SYSCALL_TRACE	(1 << TIF_SYSCALL_TRACE)
  #define _TIF_SYSCALL_AUDIT	(1 << TIF_SYSCALL_AUDIT)
-@@ -158,8 +161,8 @@ extern int vfp_restore_user_hwstate(struct user_vfp *,
+@@ -158,7 +161,8 @@ extern int vfp_restore_user_hwstate(struct user_vfp *,
   * Change these and you break ASM code in entry-common.S
   */
  #define _TIF_WORK_MASK		(_TIF_NEED_RESCHED | _TIF_SIGPENDING | \
- 				 _TIF_NOTIFY_RESUME | _TIF_UPROBE | \
--				 _TIF_NOTIFY_SIGNAL)
+-				 _TIF_NOTIFY_RESUME | _TIF_UPROBE)
++				 _TIF_NOTIFY_RESUME | _TIF_UPROBE | \
 +				 _TIF_NEED_RESCHED_LAZY)
  
  #endif /* __KERNEL__ */
@@ -1281,26 +1280,24 @@ index 1fbab854a51b0..148b53dc2840e 100644
  	union {
  		u64		preempt_count;	/* 0 => preemptible, <0 => bug */
  		struct {
-@@ -68,7 +69,7 @@ void arch_release_task_struct(struct task_struct *tsk);
+@@ -68,6 +69,7 @@ void arch_release_task_struct(struct task_struct *tsk);
  #define TIF_UPROBE		4	/* uprobe breakpoint or singlestep */
  #define TIF_FSCHECK		5	/* Check FS is USER_DS on return */
  #define TIF_MTE_ASYNC_FAULT	6	/* MTE Asynchronous Tag Check Fault */
--#define TIF_NOTIFY_SIGNAL	7	/* signal notifications exist */
 +#define TIF_NEED_RESCHED_LAZY	7
  #define TIF_SYSCALL_TRACE	8	/* syscall trace active */
  #define TIF_SYSCALL_AUDIT	9	/* syscall auditing */
  #define TIF_SYSCALL_TRACEPOINT	10	/* syscall tracepoint for ftrace */
-@@ -98,13 +100,14 @@ void arch_release_task_struct(struct task_struct *tsk);
+@@ -98,11 +100,14 @@ void arch_release_task_struct(struct task_struct *tsk);
  #define _TIF_32BIT		(1 << TIF_32BIT)
  #define _TIF_SVE		(1 << TIF_SVE)
  #define _TIF_MTE_ASYNC_FAULT	(1 << TIF_MTE_ASYNC_FAULT)
--#define _TIF_NOTIFY_SIGNAL	(1 << TIF_NOTIFY_SIGNAL)
 +#define _TIF_NEED_RESCHED_LAZY	(1 << TIF_NEED_RESCHED_LAZY)
  
  #define _TIF_WORK_MASK		(_TIF_NEED_RESCHED | _TIF_SIGPENDING | \
  				 _TIF_NOTIFY_RESUME | _TIF_FOREIGN_FPSTATE | \
- 				 _TIF_UPROBE | _TIF_FSCHECK | _TIF_MTE_ASYNC_FAULT | \
--				 _TIF_NOTIFY_SIGNAL)
+-				 _TIF_UPROBE | _TIF_FSCHECK | _TIF_MTE_ASYNC_FAULT)
++				 _TIF_UPROBE | _TIF_FSCHECK | _TIF_MTE_ASYNC_FAULT \
 +				 _TIF_NEED_RESCHED_LAZY)
  
 +#define _TIF_NEED_RESCHED_MASK	(_TIF_NEED_RESCHED | _TIF_NEED_RESCHED_LAZY)
@@ -2524,12 +2521,12 @@ index 46a210b03d2b8..0e316b44b2d73 100644
  #define _TIF_SYSCALL_EMU	(1<<TIF_SYSCALL_EMU)
  #define _TIF_SYSCALL_DOTRACE	(_TIF_SYSCALL_TRACE | _TIF_SYSCALL_AUDIT | \
  				 _TIF_SECCOMP | _TIF_SYSCALL_TRACEPOINT | \
-@@ -136,9 +143,10 @@ void arch_setup_new_exec(void);
+@@ -136,8 +143,10 @@ void arch_setup_new_exec(void);
  
  #define _TIF_USER_WORK_MASK	(_TIF_SIGPENDING | _TIF_NEED_RESCHED | \
  				 _TIF_NOTIFY_RESUME | _TIF_UPROBE | \
- 				 _TIF_RESTORE_TM | _TIF_PATCH_PENDING | \
--				 _TIF_NOTIFY_SIGNAL)
+-				 _TIF_RESTORE_TM | _TIF_PATCH_PENDING)
++				 _TIF_RESTORE_TM | _TIF_PATCH_PENDING | \
 +				 _TIF_NEED_RESCHED_LAZY)
  #define _TIF_PERSYSCALL_MASK	(_TIF_RESTOREALL|_TIF_NOERROR)
 +#define _TIF_NEED_RESCHED_MASK	(_TIF_NEED_RESCHED | _TIF_NEED_RESCHED_LAZY)
@@ -4468,19 +4465,17 @@ index e701f29b48817..596a46c4a05df 100644
  #endif
  
  /*
-@@ -93,7 +100,7 @@ struct thread_info {
+@@ -93,6 +100,7 @@ struct thread_info {
  #define TIF_NOTSC		16	/* TSC is not accessible in userland */
  #define TIF_IA32		17	/* IA32 compatibility process */
  #define TIF_SLD			18	/* Restore split lock detection on context switch */
--#define TIF_NOTIFY_SIGNAL	19	/* signal notifications exist */
 +#define TIF_NEED_RESCHED_LAZY	19	/* lazy rescheduling necessary */
  #define TIF_MEMDIE		20	/* is terminating due to OOM killer */
  #define TIF_POLLING_NRFLAG	21	/* idle is polling for TIF_NEED_RESCHED */
  #define TIF_IO_BITMAP		22	/* uses I/O bitmap */
-@@ -122,7 +130,7 @@ struct thread_info {
+@@ -122,6 +130,7 @@ struct thread_info {
  #define _TIF_NOTSC		(1 << TIF_NOTSC)
  #define _TIF_IA32		(1 << TIF_IA32)
--#define _TIF_NOTIFY_SIGNAL	(1 << TIF_NOTIFY_SIGNAL)
  #define _TIF_SLD		(1 << TIF_SLD)
 +#define _TIF_NEED_RESCHED_LAZY	(1 << TIF_NEED_RESCHED_LAZY)
  #define _TIF_POLLING_NRFLAG	(1 << TIF_POLLING_NRFLAG)
@@ -4508,7 +4503,7 @@ index 65d11711cd7bb..180981654c835 100644
  	inc_irq_stat(hyperv_stimer0_count);
  	if (hv_stimer0_handler)
  		hv_stimer0_handler();
--	add_interrupt_randomness(HYPERV_STIMER0_VECTOR);
+-	add_interrupt_randomness(HYPERV_STIMER0_VECTOR, 0);
 +	add_interrupt_randomness(HYPERV_STIMER0_VECTOR, 0, ip);
  	ack_APIC_irq();
  
@@ -5005,9 +5000,7 @@ diff --git a/block/blk-mq.c b/block/blk-mq.c
 index 15a11a217cd03..ebd6edb34c836 100644
 --- a/block/blk-mq.c
 +++ b/block/blk-mq.c
-@@ -41,7 +41,7 @@
- #include "blk-mq-sched.h"
- #include "blk-rq-qos.h"
+@@ -41,5 +41,5 @@
  
  #include <trace/hooks/block.h>
  
@@ -5352,7 +5345,7 @@ index 340ad21491e28..209220eca36f7 100644
  	return *ptr;
  }
  
--void add_interrupt_randomness(int irq)
+-void add_interrupt_randomness(int irq, int irq_flags)
 +void add_interrupt_randomness(int irq, int irq_flags, __u64 ip)
  {
  	struct entropy_store	*r;
@@ -6200,7 +6193,7 @@ index a5a402e776c77..d0763ea99ded4 100644
  			tasklet_schedule(&hv_cpu->msg_dpc);
  	}
  
--	add_interrupt_randomness(hv_get_vector());
+-	add_interrupt_randomness(hv_get_vector(), 0);
 +	add_interrupt_randomness(hv_get_vector(), 0, ip);
  }
  
@@ -6929,11 +6922,7 @@ index 34aa2714f3c93..42cd2baa7663c 100644
  	return true;
  }
  
-@@ -145,10 +188,10 @@ static inline bool serial8250_clear_THRI(struct uart_8250_port *up)
- 	if (!(up->ier & UART_IER_THRI))
- 		return false;
- 	up->ier &= ~UART_IER_THRI;
- #if defined(CONFIG_ARCH_ROCKCHIP) && defined(CONFIG_NO_GKI)
+@@ -145,6 +188,6 @@ static inline bool serial8250_clear_THRI(struct uart_8250_port *up)
  	up->ier &= ~UART_IER_PTIME;
  #endif
 -	serial_out(up, UART_IER, up->ier);
@@ -7564,7 +7553,7 @@ index df466ef81dddf..9035ca60bfcf3 100644
  		n = ULLONG_MAX - ctx->count;
  	ctx->count += n;
  	if (waitqueue_active(&ctx->wqh))
- 		wake_up_locked_poll(&ctx->wqh, EPOLLIN | mask);
+ 		wake_up_locked_poll(&ctx->wqh, EPOLLIN);
 -	this_cpu_dec(eventfd_wake_count);
 +	current->in_eventfd_signal = 0;
  	spin_unlock_irqrestore(&ctx->wqh.lock, flags);
@@ -8077,13 +8066,12 @@ diff --git a/include/linux/debug_locks.h b/include/linux/debug_locks.h
 index edb5c186b0b7a..3f49e65169c6d 100644
 --- a/include/linux/debug_locks.h
 +++ b/include/linux/debug_locks.h
-@@ -3,9 +3,7 @@
+@@ -3,8 +3,6 @@
  #define __LINUX_DEBUG_LOCKING_H
  
  #include <linux/atomic.h>
 -#include <linux/bug.h>
 -#include <linux/printk.h>
- #include <linux/cache.h>
  
  struct task_struct;
  
@@ -8110,7 +8098,7 @@ index 7dff07713a073..78765caeabc0a 100644
  
  #define EXIT_TO_USER_MODE_WORK						\
  	(_TIF_SIGPENDING | _TIF_NOTIFY_RESUME | _TIF_UPROBE |		\
--	 _TIF_NEED_RESCHED | _TIF_PATCH_PENDING | _TIF_NOTIFY_SIGNAL |	\
+-	 _TIF_NEED_RESCHED | _TIF_PATCH_PENDING |			\
 +	 _TIF_NEED_RESCHED_MASK | _TIF_PATCH_PENDING |			\
  	 ARCH_EXIT_TO_USER_MODE_WORK)
  
@@ -10013,14 +10001,14 @@ index f45b8be3e3c4e..0e41d05278091 100644
 --- a/include/linux/random.h
 +++ b/include/linux/random.h
 @@ -35,7 +35,7 @@ static inline void add_latent_entropy(void) {}
- void add_bootloader_randomness(const void *buf, size_t len);
- void add_input_randomness(unsigned int type, unsigned int code,
- 			  unsigned int value) __latent_entropy;
--void add_interrupt_randomness(int irq) __latent_entropy;
-+extern void add_interrupt_randomness(int irq, int irq_flags, __u64 ip) __latent_entropy;
- void add_hwgenerator_randomness(const void *buf, size_t len, size_t entropy);
  
- #if defined(LATENT_ENTROPY_PLUGIN) && !defined(__CHECKER__)
+ extern void add_input_randomness(unsigned int type, unsigned int code,
+ 				 unsigned int value) __latent_entropy;
+-extern void add_interrupt_randomness(int irq, int irq_flags) __latent_entropy;
++extern void add_interrupt_randomness(int irq, int irq_flags, __u64 ip) __latent_entropy;
+ 
+ extern void get_random_bytes(void *buf, int nbytes);
+ extern int wait_for_random_bytes(void);
 diff --git a/include/linux/rbtree.h b/include/linux/rbtree.h
 index d7db179963221..c33b0e16d04b4 100644
 --- a/include/linux/rbtree.h
@@ -10779,11 +10767,7 @@ diff --git a/include/linux/sched/hotplug.h b/include/linux/sched/hotplug.h
 index 9a62ffdd296f0..412cdaba33eb4 100644
 --- a/include/linux/sched/hotplug.h
 +++ b/include/linux/sched/hotplug.h
-@@ -11,11 +11,13 @@ extern int sched_cpu_activate(unsigned int cpu);
- extern int sched_cpu_deactivate(unsigned int cpu);
- extern int sched_cpus_deactivate_nosync(struct cpumask *cpus);
- extern int sched_cpu_drain_rq(unsigned int cpu);
- extern void sched_cpu_drain_rq_wait(unsigned int cpu);
+@@ -11,7 +11,9 @@ extern int sched_cpu_activate(unsigned int cpu);
  
  #ifdef CONFIG_HOTPLUG_CPU
 +extern int sched_cpu_wait_empty(unsigned int cpu);
@@ -12638,12 +12622,11 @@ index e465903abed9e..bc8f048b2dca2 100644
  	io_uring_free(tsk);
  	cgroup_free(tsk);
  	task_numa_free(tsk, true);
-@@ -926,11 +949,13 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
+@@ -926,10 +949,12 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
  	tsk->splice_pipe = NULL;
  	tsk->task_frag.page = NULL;
  	tsk->wake_q.next = NULL;
 +	tsk->wake_q_sleeper.next = NULL;
- 	tsk->pf_io_worker = NULL;
  
  	account_kernel_stack(tsk, 1);
  
@@ -12842,7 +12825,7 @@ index 762a928e18f92..7929fcdb78174 100644
  
  	retval = __handle_irq_event_percpu(desc, &flags);
  
--	add_interrupt_randomness(desc->irq_data.irq);
+-	add_interrupt_randomness(desc->irq_data.irq, flags);
 +#ifdef CONFIG_PREEMPT_RT
 +	desc->random_ip = ip;
 +#else
@@ -12861,11 +12844,11 @@ index 79dc02b956dc3..de00a0599afe5 100644
  
 +	sched_set_fifo(current);
 +
- 	irq_thread_set_ready(desc, action);
- 
  	if (force_irqthreads && test_bit(IRQTF_FORCED_THREAD,
  					&action->thread_flags))
  		handler_fn = irq_forced_thread_fn;
+ 	else
+ 		handler_fn = irq_thread_fn;
 @@ -1179,6 +1181,12 @@ static int irq_thread(void *data)
  		if (action_ret == IRQ_WAKE_THREAD)
  			irq_wake_secondary(desc, action);
@@ -21175,19 +21158,12 @@ diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
 index c004e3b89c324..bc1e5d3231088 100644
 --- a/kernel/sched/fair.c
 +++ b/kernel/sched/fair.c
-@@ -4397,11 +4397,11 @@ check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
- 	ideal_runtime = sched_slice(cfs_rq, curr);
- 	delta_exec = curr->sum_exec_runtime - curr->prev_sum_exec_runtime;
- 	trace_android_rvh_check_preempt_tick(current, &ideal_runtime, &skip_preempt,
- 			delta_exec, cfs_rq, curr, sysctl_sched_min_granularity);
- 	if (skip_preempt)
- 		return;
+@@ -4427,4 +4427,4 @@ check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
  	if (delta_exec > ideal_runtime) {
 -		resched_curr(rq_of(cfs_rq));
 +		resched_curr_lazy(rq_of(cfs_rq));
  		/*
  		 * The current task ran long enough, ensure it doesn't get
- 		 * re-elected due to buddy favours.
 @@ -4421,7 +4421,7 @@ check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
  		return;
  
