@@ -4977,9 +4977,7 @@ diff --git a/block/blk-mq.c b/block/blk-mq.c
 index 15a11a217cd03..ebd6edb34c836 100644
 --- a/block/blk-mq.c
 +++ b/block/blk-mq.c
-@@ -41,7 +41,7 @@
- #include "blk-mq-sched.h"
- #include "blk-rq-qos.h"
+@@ -41,5 +41,5 @@
  
  #include <trace/hooks/block.h>
  
@@ -6888,11 +6886,7 @@ index 34aa2714f3c93..42cd2baa7663c 100644
  	return true;
  }
  
-@@ -145,10 +188,10 @@ static inline bool serial8250_clear_THRI(struct uart_8250_port *up)
- 	if (!(up->ier & UART_IER_THRI))
- 		return false;
- 	up->ier &= ~UART_IER_THRI;
- #if defined(CONFIG_ARCH_ROCKCHIP) && defined(CONFIG_NO_GKI)
+@@ -145,6 +188,6 @@ static inline bool serial8250_clear_THRI(struct uart_8250_port *up)
  	up->ier &= ~UART_IER_PTIME;
  #endif
 -	serial_out(up, UART_IER, up->ier);
@@ -10738,11 +10732,7 @@ diff --git a/include/linux/sched/hotplug.h b/include/linux/sched/hotplug.h
 index 9a62ffdd296f0..412cdaba33eb4 100644
 --- a/include/linux/sched/hotplug.h
 +++ b/include/linux/sched/hotplug.h
-@@ -11,11 +11,13 @@ extern int sched_cpu_activate(unsigned int cpu);
- extern int sched_cpu_deactivate(unsigned int cpu);
- extern int sched_cpus_deactivate_nosync(struct cpumask *cpus);
- extern int sched_cpu_drain_rq(unsigned int cpu);
- extern void sched_cpu_drain_rq_wait(unsigned int cpu);
+@@ -11,7 +11,9 @@ extern int sched_cpu_activate(unsigned int cpu);
  
  #ifdef CONFIG_HOTPLUG_CPU
 +extern int sched_cpu_wait_empty(unsigned int cpu);
@@ -19775,14 +19765,10 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
  		cpu = p->sched_class->select_task_rq(p, cpu, sd_flags, wake_flags);
  	else
  		cpu = cpumask_any(p->cpus_ptr);
-@@ -2384,6 +2902,7 @@ int select_task_rq(struct task_struct *p, int cpu, int sd_flags, int wake_flags)
- 
- void sched_set_stop_task(int cpu, struct task_struct *stop)
+@@ -2384,2 +2902,3 @@ void sched_set_stop_task(int cpu, struct task_struct *stop)
  {
 +	static struct lock_class_key stop_pi_lock;
  	struct sched_param param = { .sched_priority = MAX_RT_PRIO - 1 };
- 	struct task_struct *old_stop = cpu_rq(cpu)->stop;
- 
 @@ -2399,6 +2918,20 @@ void sched_set_stop_task(int cpu, struct task_struct *stop)
  		sched_setscheduler_nocheck(stop, SCHED_FIFO, &param);
  
@@ -20810,16 +20796,12 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
  	rq_unlock_irqrestore(rq, &rf);
  
  	trace_android_rvh_sched_cpu_dying(cpu);
-@@ -7183,6 +7918,9 @@ void __init sched_init(void)
- 
- 		rq_csd_init(rq, &rq->nohz_csd, nohz_csd_func);
+@@ -7183,2 +7918,5 @@ void __init sched_init(void)
  #endif
 +#ifdef CONFIG_HOTPLUG_CPU
 +		rcuwait_init(&rq->hotplug_wait);
 +#endif
  #endif /* CONFIG_SMP */
- 		hrtick_rq_init(rq);
- 		atomic_set(&rq->nr_iowait, 0);
 @@ -7223,7 +7961,7 @@ void __init sched_init(void)
  #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
  static inline int preempt_count_equals(int preempt_offset)
@@ -21134,19 +21116,12 @@ diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
 index c004e3b89c324..bc1e5d3231088 100644
 --- a/kernel/sched/fair.c
 +++ b/kernel/sched/fair.c
-@@ -4397,11 +4397,11 @@ check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
- 	ideal_runtime = sched_slice(cfs_rq, curr);
- 	delta_exec = curr->sum_exec_runtime - curr->prev_sum_exec_runtime;
- 	trace_android_rvh_check_preempt_tick(current, &ideal_runtime, &skip_preempt,
- 			delta_exec, cfs_rq, curr, sysctl_sched_min_granularity);
- 	if (skip_preempt)
- 		return;
+@@ -4427,4 +4427,4 @@ check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
  	if (delta_exec > ideal_runtime) {
 -		resched_curr(rq_of(cfs_rq));
 +		resched_curr_lazy(rq_of(cfs_rq));
  		/*
  		 * The current task ran long enough, ensure it doesn't get
- 		 * re-elected due to buddy favours.
 @@ -4421,7 +4421,7 @@ check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
  		return;
  

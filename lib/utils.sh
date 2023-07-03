@@ -242,7 +242,18 @@ prepare_source() {
 
             if (( ${#patches[@]} ))
             then
-                git apply --reject --whitespace=fix "${patches[@]}"
+                if [[ -f $d/PKGBUILD ]]
+                then
+                    for p in "${patches[@]}"
+                    do
+                        # Manjaro uses patch for fuzzy matching
+                        patch -N -p1 < "$p"
+                    done
+                    git add .
+                    git commit --no-verify -m "bsp patchset $(basename $d)"
+                else
+                    git am --reject --whitespace=fix "${patches[@]}"
+                fi
                 echo "Patchset $(basename $d) has been applied."
                 if $PATCH_PAUSE
                 then
