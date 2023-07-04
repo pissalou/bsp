@@ -18938,12 +18938,10 @@ index 849f0aa99333b..dd94a602a6d25 100644
  #endif /* #ifndef CONFIG_TINY_RCU */
  
  #ifdef CONFIG_DEBUG_LOCK_ALLOC
-diff --git a/kernel/sched/core.c.orig b/mnt/c/code/bsp-rt-kernel-5.10/expected_core_v3.4.c
-old mode 100644
-new mode 100755
-index 6ea0e3ceabea..94f5bb234415
---- a/kernel/sched/core.c.orig
-+++ b/mnt/c/code/bsp-rt-kernel-5.10/expected_core_v3.4.c
+diff --git a/kernel/sched/core.c b/kernel/sched/core.c
+index 0a5f9fad45e4b..d688f9de78ed7 100644
+--- a/kernel/sched/core.c
++++ b/kernel/sched/core.c
 @@ -78,7 +78,11 @@ EXPORT_SYMBOL_GPL(sysctl_sched_features);
   * Number of tasks to iterate in a single balance run.
   * Limited because this is done with IRQs disabled.
