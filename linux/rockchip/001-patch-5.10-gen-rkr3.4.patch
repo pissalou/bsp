@@ -20712,7 +20712,7 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
  #ifdef CONFIG_SCHED_SMT
  	/*
  	 * When going up, increment the number of cores with SMT present.
-@@ -7286,6 +7939,8 @@ int sched_cpus_activate(struct cpumask *cpus)
+@@ -7286,10 +7939,21 @@ int sched_cpus_activate(struct cpumask *cpus)
  
  int _sched_cpu_deactivate(unsigned int cpu)
  {
@@ -20721,17 +20721,6 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
  	int ret;
  
  	set_cpu_active(cpu, false);
-@@ -7303,6 +7958,7 @@ int _sched_cpu_deactivate(unsigned int cpu)
- 
- 	ret = cpuset_cpu_inactive(cpu);
- 	if (ret) {
-+		balance_push_set(cpu, false);
- 		set_cpu_active(cpu, true);
- 		return ret;
- 	}
-@@ -7329,6 +7985,16 @@ int sched_cpu_deactivate(unsigned int cpu)
- 	 */
- 	synchronize_rcu();
  
 +	balance_push_set(cpu, true);
 +
@@ -20742,11 +20731,18 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 +		set_rq_offline(rq);
 +	}
 +	rq_unlock_irqrestore(rq, &rf);
-+
- 	return 0;
- }
+ #ifdef CONFIG_SCHED_SMT
+ 	/*
+ 	 * When going down, decrement the number of cores with SMT present.
+@@ -7303,6 +7967,7 @@ int _sched_cpu_deactivate(unsigned int cpu)
  
-@@ -7366,6 +8032,41 @@ int sched_cpu_starting(unsigned int cpu)
+ 	ret = cpuset_cpu_inactive(cpu);
+ 	if (ret) {
++		balance_push_set(cpu, false);
+ 		set_cpu_active(cpu, true);
+ 		return ret;
+ 	}
+@@ -7366,6 +8031,41 @@ int sched_cpu_starting(unsigned int cpu)
  }
  
  #ifdef CONFIG_HOTPLUG_CPU
