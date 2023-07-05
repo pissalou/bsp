@@ -19683,7 +19683,7 @@ index 0a5f9fad45e4b..d688f9de78ed7 100644
 -	/* Can the task run on the task's current CPU? If so, we're done */
 -	if (cpumask_test_cpu(task_cpu(p), new_mask))
 -		goto out;
-+	return affine_move_task(rq, p, &rf, dest_cpu, flags);
++	return affine_move_task(rq, p, rf, dest_cpu, flags);
  
 -	if (task_running(rq, p) || p->state == TASK_WAKING) {
 -		struct migration_arg arg = { p, dest_cpu };
