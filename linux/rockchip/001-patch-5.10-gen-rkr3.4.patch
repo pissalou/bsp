@@ -16080,14 +16080,30 @@ index 85351a12c85dc..dea500da571f2 100644
  #include <linux/sched/clock.h>
  #include <linux/sched/debug.h>
  #include <linux/sched/task_stack.h>
-@@ -58,7 +61,6 @@
+@@ -58,23 +61,4 @@
  #include "printk_ringbuffer.h"
  #include "console_cmdline.h"
  #include "braille.h"
 -#include "internal.h"
+-
+-#ifdef CONFIG_PRINTK_TIME_FROM_ARM_ARCH_TIMER
+-#include <clocksource/arm_arch_timer.h>
+-static u64 get_local_clock(void)
+-{
+-	u64 ns;
+-
+-	ns = arch_timer_read_counter() * 1000;
+-	do_div(ns, 24);
+-
+-	return ns;
+-}
+-#else
+-static inline u64 get_local_clock(void)
+-{
+-	return local_clock();
+-}
+-#endif
  
- #ifdef CONFIG_PRINTK_TIME_FROM_ARM_ARCH_TIMER
- #include <clocksource/arm_arch_timer.h>
 @@ -225,19 +227,7 @@ static int nr_ext_console_drivers;
  
  static int __down_trylock_console_sem(unsigned long ip)
