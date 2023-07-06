@@ -26702,6 +26702,18 @@ index 1384dc9068337..d90d8f9fc0d85 100644
  	order = get_order(sizeof(struct location) * max);
  
  	l = (void *)__get_free_pages(flags, order);
+@@ -5839,9 +5919,9 @@ static int slab_debug_trace_open(struct inode *inode, struct file *filep)
+ 
+-		spin_lock_irqsave(&n->list_lock, flags);
++		raw_spin_lock_irqsave(&n->list_lock, flags);
+ 		list_for_each_entry(page, &n->partial, slab_list)
+ 			process_slab(t, s, page, alloc, obj_map);
+ 		list_for_each_entry(page, &n->full, slab_list)
+ 			process_slab(t, s, page, alloc, obj_map);
+-		spin_unlock_irqrestore(&n->list_lock, flags);
++		raw_spin_unlock_irqrestore(&n->list_lock, flags);
+ 	}
+ 
 diff --git a/mm/vmalloc.c b/mm/vmalloc.c
 index fff03a331314f..2cbbbdb69ec42 100644
 --- a/mm/vmalloc.c
