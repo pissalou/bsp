@@ -8068,12 +8068,13 @@ diff --git a/include/linux/debug_locks.h b/include/linux/debug_locks.h
 index edb5c186b0b7a..3f49e65169c6d 100644
 --- a/include/linux/debug_locks.h
 +++ b/include/linux/debug_locks.h
-@@ -3,8 +3,6 @@
+@@ -3,8 +3,7 @@
  #define __LINUX_DEBUG_LOCKING_H
  
  #include <linux/atomic.h>
 -#include <linux/bug.h>
 -#include <linux/printk.h>
++#include <linux/cache.h>
  
  struct task_struct;
  
