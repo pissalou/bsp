@@ -12464,33 +12464,6 @@ index 89ca9b61aa0d9..753dc346520a0 100644
  
  		/* if @may_sleep, play nice and yield if necessary */
  		if (may_sleep && (need_resched() ||
-diff --git a/kernel/cpu.c b/kernel/cpu.c
-index c06ced18f78ad..10b6287afe975 100644
---- a/kernel/cpu.c
-+++ b/kernel/cpu.c
-@@ -1662,7 +1662,7 @@ static struct cpuhp_step cpuhp_hp_states[] = {
- 		.name			= "ap:online",
- 	},
- 	/*
--	 * Handled on controll processor until the plugged processor manages
-+	 * Handled on control processor until the plugged processor manages
- 	 * this itself.
- 	 */
- 	[CPUHP_TEARDOWN_CPU] = {
-@@ -1671,6 +1671,13 @@ static struct cpuhp_step cpuhp_hp_states[] = {
- 		.teardown.single	= takedown_cpu,
- 		.cant_stop		= true,
- 	},
-+
-+	[CPUHP_AP_SCHED_WAIT_EMPTY] = {
-+		.name			= "sched:waitempty",
-+		.startup.single		= NULL,
-+		.teardown.single	= sched_cpu_wait_empty,
-+	},
-+
- 	/* Handle smpboot threads park/unpark */
- 	[CPUHP_AP_SMPBOOT_THREADS] = {
- 		.name			= "smpboot/threads:online",
 diff --git a/kernel/debug/kdb/kdb_main.c b/kernel/debug/kdb/kdb_main.c
 index 930ac1b25ec7c..dbf1d126ac5e1 100644
 --- a/kernel/debug/kdb/kdb_main.c
