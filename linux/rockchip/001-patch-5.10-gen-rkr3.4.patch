@@ -6946,8 +6946,8 @@ index 3d69640349d9..2c2a721e2269
  
 -	kmsg_dump_rewind_nolock(&dumper);
 -	while (kmsg_dump_get_line_nolock(&dumper, true, buf,
-+	kmsg_dump_rewind(&dumper);
-+	while (kmsg_dump_get_line(&dumper, true, buf,
++	kmsg_dump_rewind(&iter);
++	while (kmsg_dump_get_line(&iter, true, buf,
  					 sizeof(buf) - 1, &len)) {
  		buf[len] = 0;
  		fiq_debugger_puts(state, buf);
