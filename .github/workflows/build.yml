@@ -68,4 +68,4 @@ jobs:
           target: ${{ matrix.targets }}
           edition: ${{ matrix.editions }}
           artifacts: true
-          revision: "555"
+          revision: "555-rt"
